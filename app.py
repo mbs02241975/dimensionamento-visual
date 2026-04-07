@@ -195,6 +195,27 @@ CATALOGO_MATERIAIS = {
         "categoria": "Acabamento",
         "fator_perda": 1.10,
         "preco_unitario": 35.00
+    },
+    "perfil_aluminio": {
+        "nome": "Perfil de Alumínio",
+        "unidade": "metro",
+        "categoria": "Estrutura Metálica",
+        "fator_perda": 1.05,
+        "preco_unitario": 25.00
+    },
+    "parafuso": {
+        "nome": "Parafusos e Fixadores",
+        "unidade": "unidade",
+        "categoria": "Fixação",
+        "fator_perda": 1.0,
+        "preco_unitario": 0.50
+    },
+    "silicone": {
+        "nome": "Silicone para Vedação",
+        "unidade": "metro",
+        "categoria": "Fixação",
+        "fator_perda": 1.10,
+        "preco_unitario": 2.00
     }
 }
 
@@ -212,7 +233,6 @@ def extrair_texto_pdf(arquivo):
                 if texto:
                     texto_completo += f"===== Página {i+1} =====\n{texto}\n"
                 else:
-                    # Tenta extrair com layout preservado
                     texto = pagina.extract_text(layout=True)
                     if texto:
                         texto_completo += f"===== Página {i+1} =====\n{texto}\n"
@@ -225,7 +245,6 @@ def extrair_medidas_ultra_avancado(texto):
     """Extrai medidas de QUALQUER formato encontrado na comunicação visual"""
     medidas = {}
     
-    # Padrões de medida
     padroes = {
         "m2_direto": r"(\d+[.,]?\d*)\s*m[²2]",
         "largura_x_altura": r"(\d+[.,]?\d*)\s*[xX]\s*(\d+[.,]?\d*)\s*m",
@@ -253,26 +272,15 @@ def extrair_medidas_ultra_avancado(texto):
                 for match in matches:
                     larg = float(match[0].replace(",", "."))
                     alt = float(match[1].replace(",", "."))
-                    medidas[f"{chave}_largura"] = larg
-                    medidas[f"{chave}_altura"] = alt
                     medidas["area_m2"] = larg * alt
             elif chave == "cm_x_cm":
                 for match in matches:
                     larg_cm = float(match[0])
                     alt_cm = float(match[1])
-                    medidas["largura_cm"] = larg_cm
-                    medidas["altura_cm"] = alt_cm
                     medidas["area_m2"] = (larg_cm * alt_cm) / 10000
-            elif chave == "volume":
-                for match in matches:
-                    comp = float(match[0].replace(",", "."))
-                    larg = float(match[1].replace(",", "."))
-                    alt = float(match[2].replace(",", "."))
-                    medidas["volume_m3"] = comp * larg * alt
             elif chave == "comprimento_linear":
                 for match in matches:
                     medidas["comprimento_m"] = float(match[0])
-                    medidas["tipo_linear"] = match[1]
             elif chave in ["m2_direto", "m2_texto"]:
                 for match in matches:
                     medidas["area_m2"] = float(match.replace(",", ".")) if isinstance(match, str) else float(match[0].replace(",", "."))
@@ -280,6 +288,55 @@ def extrair_medidas_ultra_avancado(texto):
                 for match in matches:
                     valor = float(match[0].replace(",", ".")) if isinstance(match, tuple) else float(match.replace(",", "."))
                     medidas[chave] = valor
+    
+    return medidas
+
+def extrair_medidas_desenho_tecnico(texto):
+    """Extrai medidas específicas de desenhos técnicos"""
+    medidas = {}
+    
+    padroes = {
+        "painel_dimensoes": r"Painel\s+(\d+[.,]?\d*)\s*x\s*(\d+[.,]?\d*)",
+        "espessura_chapa": r"chapa\s+galvanizada\s*#?(\d+)",
+        "espessura_acrilico": r"acr[íi]lico[s]?\s+de\s+(\d+)\s*mm",
+        "temp_led": r"(\d+[.,]?\d*)\s*K\s*(?:kelvin)?",
+        "potencia_fonte": r"Fonte\s+(\d+)\s*A",
+        "modelo_led": r"M[oó]dulos?\s+([A-Za-z0-9\s]+?)(?:\s+de|\s+com|\s+\d+W|$)",
+        "quantidade_led_detalhada": r"(\d+)\s*(?:unidades?|pe[çc]as?|m[oó]dulos?)\s+de\s+LED",
+        "tipo_montagem": r"(face\s+unica|face\s+dupla|iluminado|backlight|frontlit)",
+        "fixacao": r"fixa[çc][aã]o\s+com\s+(.+?)(?:\n|$)",
+        "medida_estrutura": r"Estrutura\s+(\d+[.,]?\d*)\s*x\s*(\d+[.,]?\d*)"
+    }
+    
+    for chave, padrao in padroes.items():
+        matches = re.findall(padrao, texto, re.IGNORECASE)
+        if matches:
+            if chave == "painel_dimensoes":
+                for match in matches:
+                    larg = float(match[0].replace(",", "."))
+                    alt = float(match[1].replace(",", "."))
+                    medidas["largura_painel"] = larg
+                    medidas["altura_painel"] = alt
+                    medidas["area_painel"] = larg * alt
+            elif chave == "espessura_chapa":
+                medidas["bitola_chapa"] = int(matches[0])
+                # #22 chapa = 0,76mm, #18 = 1,2mm, #16 = 1,5mm
+                bitolas = {22: 0.76, 20: 0.95, 18: 1.2, 16: 1.5, 14: 1.9}
+                medidas["espessura_chapa_mm"] = bitolas.get(int(matches[0]), 0.76)
+            elif chave == "espessura_acrilico":
+                medidas["espessura_acrilico_mm"] = int(matches[0])
+            elif chave == "temp_led":
+                medidas["temperatura_cor_led_k"] = float(matches[0])
+            elif chave == "potencia_fonte":
+                medidas["amperagem_fonte"] = float(matches[0])
+            elif chave == "quantidade_led_detalhada":
+                medidas["qtd_led"] = int(matches[0])
+            elif chave == "tipo_montagem":
+                medidas["tipo_painel"] = matches[0]
+            elif chave == "medida_estrutura":
+                for match in matches:
+                    medidas["largura_estrutura"] = float(match[0].replace(",", "."))
+                    medidas["altura_estrutura"] = float(match[1].replace(",", "."))
     
     return medidas
 
@@ -296,43 +353,35 @@ def extrair_cabecalho_completo(texto):
         "observacoes": ""
     }
     
-    # Número da OP
     match_op = re.search(r"OP[^\d]*(\d+)", texto, re.IGNORECASE)
     if match_op:
         cabecalho["numero_op"] = match_op.group(1)
     
-    # Data
     match_data = re.search(r"Data:\s*(\d{2}/\d{2}/\d{4})", texto)
     if match_data:
         cabecalho["data"] = match_data.group(1)
     
-    # Razão social
     match_razao = re.search(r"Razão social:\s*(.+)", texto, re.IGNORECASE)
     if match_razao:
         cabecalho["razao_social"] = match_razao.group(1).strip()
         cabecalho["cliente"] = match_razao.group(1).strip()
     
-    # Nome fantasia
     match_fantasia = re.search(r"Nome de Fantasia do Cliente:\s*(.+)", texto, re.IGNORECASE)
     if match_fantasia:
         cabecalho["cliente"] = match_fantasia.group(1).strip()
     
-    # Local da instalação
     match_local = re.search(r"Local da Instalação:\s*(.+)", texto, re.IGNORECASE)
     if match_local:
         cabecalho["local_instalacao"] = match_local.group(1).strip()
     
-    # Contato
     match_contato = re.search(r"Contato[^:]*:\s*(.+)", texto, re.IGNORECASE)
     if match_contato:
         cabecalho["contato"] = match_contato.group(1).strip()
     
-    # Endereço
     match_end = re.search(r"Endereço Instalação[:\s]*(.+)", texto, re.IGNORECASE)
     if match_end:
         cabecalho["endereco"] = match_end.group(1).strip()
     
-    # Observações
     match_obs = re.search(r"Observações?:\s*(.+)", texto, re.IGNORECASE)
     if match_obs:
         cabecalho["observacoes"] = match_obs.group(1).strip()
@@ -351,14 +400,11 @@ def extrair_itens_completos(texto):
         if not linha or len(linha) < 3:
             continue
         
-        # Detecta início de item
         match = re.match(r"^([A-Za-z]\)?)\s*(\d+)\s+(.+)", linha, re.IGNORECASE)
         if match and "Item" not in linha and "DESCRIÇÃO" not in linha:
-            # Salva item anterior
             if item_atual and item_atual.get("descricao"):
                 itens.append(item_atual)
             
-            # Cria novo item
             codigo = match.group(1).replace(")", "")
             quantidade = int(match.group(2))
             descricao = match.group(3)
@@ -370,16 +416,13 @@ def extrair_itens_completos(texto):
                 "descricao_completa": descricao
             }
         else:
-            # Continua descrição do item atual
             if item_atual:
                 item_atual["descricao"] += " " + linha
                 item_atual["descricao_completa"] += " " + linha
     
-    # Adiciona último item
     if item_atual and item_atual.get("descricao"):
         itens.append(item_atual)
     
-    # Extrai medidas para cada item
     for item in itens:
         item["medidas"] = extrair_medidas_ultra_avancado(item["descricao"])
         item["material_tipo"] = identificar_material_principal(item["descricao"])
@@ -414,7 +457,10 @@ def identificar_material_principal(descricao):
         "sinalização": "placa_sinalizacao",
         "merchandising": "merchandising_grid",
         "grid": "merchandising_grid",
-        "pintura de coluna": "pintura_coluna"
+        "pintura de coluna": "pintura_coluna",
+        "perfil": "perfil_aluminio",
+        "parafuso": "parafuso",
+        "silicone": "silicone"
     }
     
     for palavra, material in mapeamento.items():
@@ -432,11 +478,9 @@ def calcular_quantidade_material(item, material_info, medidas):
     
     tipo = item["material_tipo"]
     
-    # Regras específicas por tipo de material
     if tipo in ["adesivo_vinil", "lona_backlight", "lona_frontlit", "acm_aluminio", 
                 "pvc_expandido", "acrilico_transparente", "acrilico_leitoso", 
-                "poliestireno", "pintura_automotiva", "pintura_coluna"]:
-        # Materiais por área
+                "poliestireno", "pintura_automotiva", "pintura_coluna", "chapa_galvanizada"]:
         if area > 0:
             total = area * qtd
         elif medidas.get("largura_m") and medidas.get("altura_m"):
@@ -446,9 +490,7 @@ def calcular_quantidade_material(item, material_info, medidas):
         return total * material_info["fator_perda"]
     
     elif tipo in ["letra_inox", "letra_acrylic"]:
-        # Letras - calcula por centímetro linear
         if altura_letra > 0:
-            # Estima número de letras pela descrição
             desc = item["descricao"].lower()
             palavras = re.findall(r'"([^"]+)"', desc)
             if palavras:
@@ -458,9 +500,8 @@ def calcular_quantidade_material(item, material_info, medidas):
         return 0
     
     elif tipo == "led_modulo":
-        # Módulos LED - por watt ou por unidade
-        potencia = medidas.get("potencia_led", 0)
         qtd_leds = medidas.get("qtd_led", 0)
+        potencia = medidas.get("potencia_led", 0)
         if qtd_leds > 0:
             return qtd_leds * qtd
         elif potencia > 0:
@@ -468,30 +509,105 @@ def calcular_quantidade_material(item, material_info, medidas):
         return 0
     
     elif tipo == "fonte_led":
-        # Fonte LED - por ampere
-        corrente = medidas.get("corrente_driver", 0)
-        if corrente > 0:
-            return 1 * qtd
-        return 0
+        return 1 * qtd
     
     elif tipo == "estrutura_metalica":
-        # Estrutura metálica - estimativa por área
         if area > 0:
-            kg = area * 8 * qtd
+            kg = area * 12 * qtd
             return kg * material_info["fator_perda"]
         return 0
     
     elif tipo == "fita_dupla_face":
-        # Fita dupla face - estimativa por perímetro
         if medidas.get("largura_m") and medidas.get("altura_m"):
             perimetro = 2 * (medidas["largura_m"] + medidas["altura_m"])
             return perimetro * qtd
         return comprimento * qtd
     
-    elif tipo in ["totem_completo", "placa_sinalizacao", "merchandising_grid", "chapa_galvanizada"]:
+    elif tipo == "perfil_aluminio":
+        if medidas.get("largura_m") and medidas.get("altura_m"):
+            perimetro = 2 * (medidas["largura_m"] + medidas["altura_m"])
+            return perimetro * qtd * 1.1
+        return comprimento * qtd
+    
+    elif tipo in ["totem_completo", "placa_sinalizacao", "merchandising_grid", "parafuso", "silicone"]:
         return qtd
     
     return 0
+
+def calcular_material_desenho_tecnico(medidas, qtd=1):
+    """Calcula materiais específicos para desenhos técnicos"""
+    resultados = {}
+    
+    if "area_painel" in medidas and medidas["area_painel"] > 0:
+        area = medidas["area_painel"]
+        
+        resultados["acm_aluminio"] = {
+            "quantidade": area * qtd,
+            "unidade": "m²",
+            "material": "ACM - Alumínio Composto 2mm"
+        }
+        
+        if "espessura_acrilico_mm" in medidas:
+            resultados["acrilico_leitoso"] = {
+                "quantidade": area * qtd,
+                "unidade": "m²",
+                "material": f"Acrílico Branco Leitoso {medidas['espessura_acrilico_mm']}mm"
+            }
+        
+        if "bitola_chapa" in medidas:
+            resultados["chapa_galvanizada"] = {
+                "quantidade": area * qtd * 1.05,
+                "unidade": "m²",
+                "material": f"Chapa Galvanizada #{medidas['bitola_chapa']}"
+            }
+        
+        resultados["estrutura_metalica"] = {
+            "quantidade": area * 12 * qtd,
+            "unidade": "kg",
+            "material": "Estrutura Metálica (suporte)"
+        }
+        
+        perimetro = 2 * (medidas.get("largura_painel", 1) + medidas.get("altura_painel", 1))
+        resultados["perfil_aluminio"] = {
+            "quantidade": perimetro * qtd,
+            "unidade": "metro",
+            "material": "Perfil de Alumínio para Moldura"
+        }
+        
+        resultados["parafuso"] = {
+            "quantidade": int(area * 8) * qtd,
+            "unidade": "unidade",
+            "material": "Parafusos autoatarrachantes"
+        }
+        
+        resultados["silicone"] = {
+            "quantidade": perimetro * qtd,
+            "unidade": "metro",
+            "material": "Silicone para vedação"
+        }
+    
+    if "qtd_led" in medidas and medidas["qtd_led"] > 0:
+        resultados["led_modulo"] = {
+            "quantidade": medidas["qtd_led"] * qtd,
+            "unidade": "unidade",
+            "material": "Módulo LED"
+        }
+        
+        if "potencia_led" in medidas:
+            resultados["potencia_led_total"] = {
+                "quantidade": medidas["qtd_led"] * medidas["potencia_led"] * qtd,
+                "unidade": "W",
+                "material": "Potência LED Total"
+            }
+    
+    if "amperagem_fonte" in medidas:
+        resultados["fonte_led"] = {
+            "quantidade": qtd,
+            "unidade": "unidade",
+            "material": f"Fonte LED {medidas['amperagem_fonte']}A"
+        }
+    
+    return resultados
 
 # ==========================================
 # FUNÇÃO PRINCIPAL DE PROCESSAMENTO
@@ -505,14 +621,17 @@ def processar_pdf_completo(arquivo):
     
     cabecalho = extrair_cabecalho_completo(texto)
     itens = extrair_itens_completos(texto)
+    medidas_desenho = extrair_medidas_desenho_tecnico(texto)
     
-    # Processa cada item
     resultados = []
+    
+    # Processa itens da tabela
     for item in itens:
         material_id = item["material_tipo"]
         material_info = CATALOGO_MATERIAIS.get(material_id, {
             "nome": "Outros Materiais",
             "unidade": "unidade",
+            "categoria": "Diversos",
             "fator_perda": 1.0,
             "preco_unitario": 0
         })
@@ -533,13 +652,42 @@ def processar_pdf_completo(arquivo):
         }
         resultados.append(resultado)
     
+    # Se for desenho técnico (sem itens na tabela mas com medidas de painel)
+    if len(resultados) == 0 and medidas_desenho.get("area_painel", 0) > 0:
+        st.info("📐 Desenho técnico detectado! Calculando materiais automaticamente...")
+        
+        materiais_desenho = calcular_material_desenho_tecnico(medidas_desenho, 1)
+        
+        for mat_key, mat_data in materiais_desenho.items():
+            material_info = CATALOGO_MATERIAIS.get(mat_key, {
+                "nome": mat_data["material"],
+                "unidade": mat_data["unidade"],
+                "categoria": "Desenho Técnico",
+                "fator_perda": 1.0,
+                "preco_unitario": 0
+            })
+            
+            resultado = {
+                "codigo": "TEC",
+                "quantidade_op": 1,
+                "descricao": mat_data["material"][:80],
+                "material": mat_data["material"],
+                "categoria": material_info["categoria"],
+                "unidade": mat_data["unidade"],
+                "quantidade_calculada": round(mat_data["quantidade"], 2),
+                "preco_unitario": material_info["preco_unitario"],
+                "total_material": round(mat_data["quantidade"] * material_info["preco_unitario"], 2),
+                "detalhes": f"Painel {medidas_desenho.get('largura_painel', 0)} x {medidas_desenho.get('altura_painel', 0)}m"
+            }
+            resultados.append(resultado)
+    
     return cabecalho, resultados
 
 # ==========================================
 # GERADOR DE RELATÓRIO HTML PROFISSIONAL
 # ==========================================
 
-def gerar_relatorio_html(cabecalho, resultados, nome_arquivo=""):
+def gerar_relatorio_html(cabecalho, resultados):
     """Gera relatório HTML completo com design profissional"""
     
     total_geral = sum(r["total_material"] for r in resultados)
@@ -571,13 +719,7 @@ def gerar_relatorio_html(cabecalho, resultados, nome_arquivo=""):
                 padding: 30px;
                 text-align: center;
             }}
-            .header h1 {{
-                font-size: 28px;
-                margin-bottom: 10px;
-            }}
-            .header p {{
-                opacity: 0.9;
-            }}
+            .header h1 {{ font-size: 28px; margin-bottom: 10px; }}
             .info-grid {{
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -596,44 +738,29 @@ def gerar_relatorio_html(cabecalho, resultados, nome_arquivo=""):
                 margin-bottom: 10px;
                 font-size: 14px;
                 text-transform: uppercase;
-                letter-spacing: 1px;
-            }}
-            .info-card p {{
-                color: #333;
-                font-size: 16px;
-                font-weight: 500;
-            }}
-            .content {{
-                padding: 30px;
             }}
             table {{
                 width: 100%;
                 border-collapse: collapse;
-                margin-top: 20px;
+                margin: 20px 0;
             }}
             th {{
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
                 padding: 12px;
                 text-align: left;
-                font-weight: 600;
             }}
             td {{
                 padding: 10px 12px;
                 border-bottom: 1px solid #e0e0e0;
             }}
-            tr:hover {{
-                background: #f5f5f5;
-            }}
+            tr:hover {{ background: #f5f5f5; }}
             .total {{
-                margin-top: 30px;
+                margin: 20px;
                 padding: 20px;
                 background: #e8f4f8;
                 border-radius: 8px;
                 text-align: right;
-            }}
-            .total h2 {{
-                color: #2c3e50;
             }}
             .footer {{
                 background: #2c3e50;
@@ -643,13 +770,8 @@ def gerar_relatorio_html(cabecalho, resultados, nome_arquivo=""):
                 font-size: 12px;
             }}
             @media print {{
-                body {{
-                    background: white;
-                    padding: 0;
-                }}
-                .btn-print {{
-                    display: none;
-                }}
+                body {{ background: white; padding: 0; }}
+                .btn-print {{ display: none; }}
             }}
             .btn-print {{
                 background: #667eea;
@@ -662,9 +784,6 @@ def gerar_relatorio_html(cabecalho, resultados, nome_arquivo=""):
                 margin: 20px;
                 float: right;
             }}
-            .btn-print:hover {{
-                background: #5a67d8;
-            }}
         </style>
     </head>
     <body>
@@ -676,95 +795,45 @@ def gerar_relatorio_html(cabecalho, resultados, nome_arquivo=""):
             </div>
             
             <div class="info-grid">
-                <div class="info-card">
-                    <h3>🏢 CLIENTE</h3>
-                    <p>{cabecalho.get('cliente', 'NÃO INFORMADO')}</p>
-                </div>
-                <div class="info-card">
-                    <h3>📍 LOCAL DA INSTALAÇÃO</h3>
-                    <p>{cabecalho.get('local_instalacao', 'NÃO INFORMADO')}</p>
-                </div>
-                <div class="info-card">
-                    <h3>📞 CONTATO</h3>
-                    <p>{cabecalho.get('contato', 'NÃO INFORMADO')}</p>
-                </div>
-                <div class="info-card">
-                    <h3>🔢 NÚMERO OP</h3>
-                    <p>{cabecalho.get('numero_op', 'NÃO INFORMADO')}</p>
-                </div>
-                <div class="info-card">
-                    <h3>📅 DATA</h3>
-                    <p>{cabecalho.get('data', datetime.now().strftime('%d/%m/%Y'))}</p>
-                </div>
-                <div class="info-card">
-                    <h3>📍 ENDEREÇO</h3>
-                    <p>{cabecalho.get('endereco', 'NÃO INFORMADO')}</p>
-                </div>
+                <div class="info-card"><h3>🏢 CLIENTE</h3><p>{cabecalho.get('cliente', 'NÃO INFORMADO')}</p></div>
+                <div class="info-card"><h3>📍 LOCAL</h3><p>{cabecalho.get('local_instalacao', 'NÃO INFORMADO')}</p></div>
+                <div class="info-card"><h3>📞 CONTATO</h3><p>{cabecalho.get('contato', 'NÃO INFORMADO')}</p></div>
+                <div class="info-card"><h3>🔢 OP Nº</h3><p>{cabecalho.get('numero_op', 'NÃO INFORMADO')}</p></div>
             </div>
             
-            <div class="content">
+            <div style="padding: 0 30px;">
                 <h2>📦 MATERIAIS DIMENSIONADOS</h2>
                 <table>
-                    <thead>
-                        <tr>
-                            <th>Código</th>
-                            <th>Qtd (OP)</th>
-                            <th>Descrição</th>
-                            <th>Material</th>
-                            <th>Categoria</th>
-                            <th>Unidade</th>
-                            <th>Quantidade Calculada</th>
-                            <th>Preço Unitário</th>
-                            <th>Total (R$)</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>Código</th><th>Qtd OP</th><th>Descrição</th><th>Material</th><th>Unidade</th><th>Quantidade</th><th>Total (R$)</th></tr></thead>
                     <tbody>
     """
     
     for r in resultados:
         html += f"""
-                        <tr>
-                            <td>{r['codigo']}</td>
-                            <td>{r['quantidade_op']}</td>
-                            <td>{r['descricao']}</td>
-                            <td>{r['material']}</td>
-                            <td>{r['categoria']}</td>
-                            <td>{r['unidade']}</td>
-                            <td><strong>{r['quantidade_calculada']}</strong></td>
-                            <td>R$ {r['preco_unitario']:.2f}</td>
-                            <td><strong>R$ {r['total_material']:.2f}</strong></td>
-                        </tr>
+            <tr>
+                <td>{r['codigo']}</td>
+                <td>{r['quantidade_op']}</td>
+                <td>{r['descricao']}</td>
+                <td>{r['material']}</td>
+                <td>{r['unidade']}</td>
+                <td><strong>{r['quantidade_calculada']}</strong></td>
+                <td><strong>R$ {r['total_material']:.2f}</strong></td>
+            </tr>
         """
     
     html += f"""
                     </tbody>
                 </table>
-                
-                <div class="total">
-                    <h2>💰 TOTAL GERAL: R$ {total_geral:.2f}</h2>
-                </div>
-                
-                <div class="info-card" style="margin-top: 20px;">
-                    <h3>📝 OBSERVAÇÕES</h3>
-                    <p>{cabecalho.get('observacoes', 'Sem observações adicionais')}</p>
-                </div>
+                <div class="total"><h2>💰 TOTAL GERAL: R$ {total_geral:.2f}</h2></div>
             </div>
-            
             <div class="footer">
-                <p>Este relatório foi gerado automaticamente pelo Sistema de Dimensionamento Profissional</p>
-                <p>Comunicação Visual - Todos os direitos reservados</p>
+                <p>Relatório gerado automaticamente pelo Sistema de Dimensionamento Profissional</p>
             </div>
         </div>
-        
         <button class="btn-print" onclick="window.print()">🖨️ IMPRIMIR RELATÓRIO</button>
-        
-        <script>
-            console.log("Relatório pronto para impressão");
-        </script>
     </body>
     </html>
     """
-    
     return html
 
 # ==========================================
@@ -772,18 +841,17 @@ def gerar_relatorio_html(cabecalho, resultados, nome_arquivo=""):
 # ==========================================
 
 def main():
-    # Sidebar
     with st.sidebar:
         st.markdown("## 🎯 Sistema Profissional")
         st.markdown("---")
         st.markdown("### 📋 Funcionalidades:")
         st.markdown("""
-        - ✅ Leitura automática de PDF
-        - ✅ Extração inteligente de medidas
-        - ✅ Cálculo de todos os materiais
+        - ✅ Leitura de PDFs de OP
+        - ✅ Leitura de desenhos técnicos
+        - ✅ Extração de medidas (m², cm, etc.)
+        - ✅ Cálculo de materiais
         - ✅ Relatório profissional
-        - ✅ Impressão direta
-        - ✅ Exportação de dados
+        - ✅ Exportação CSV/HTML
         """)
         st.markdown("---")
         st.markdown("### 🏆 Materiais Suportados:")
@@ -794,11 +862,11 @@ def main():
         - Totens e estruturas
         - Sinalização completa
         - Iluminação LED
-        - Pintura e acabamento
-        - Fixação e ferragens
+        - Chapas galvanizadas
+        - Perfis de alumínio
+        - Fixadores e silicones
         """)
     
-    # Header principal
     st.markdown("""
     <div class="main-header">
         <h1>📐 SISTEMA PROFISSIONAL DE DIMENSIONAMENTO</h1>
@@ -806,22 +874,16 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Upload de arquivo
-    uploaded_file = st.file_uploader(
-        "📄 Envie o PDF da Ordem de Produção",
-        type=["pdf"],
-        help="Envie qualquer PDF de OP que o sistema extrairá automaticamente as medidas"
-    )
+    uploaded_file = st.file_uploader("📄 Envie o PDF (OP ou Desenho Técnico)", type=["pdf"])
     
     if uploaded_file is not None:
-        with st.spinner("🔄 Processando PDF e calculando materiais..."):
+        with st.spinner("🔄 Processando PDF..."):
             cabecalho, resultados = processar_pdf_completo(uploaded_file)
             
             if resultados and len(resultados) > 0:
-                st.success(f"✅ Processado com sucesso! {len(resultados)} itens encontrados.")
+                st.success(f"✅ Processado! {len(resultados)} materiais calculados.")
                 
-                # Tabs para organização
-                tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "📋 Materiais", "📈 Gráficos", "🖨️ Relatório"])
+                tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📋 Materiais", "🖨️ Relatório"])
                 
                 with tab1:
                     col1, col2, col3 = st.columns(3)
@@ -836,90 +898,51 @@ def main():
                     
                     st.markdown("---")
                     st.subheader("🏢 Informações do Projeto")
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.write(f"**Cliente:** {cabecalho.get('cliente', 'N/A')}")
-                        st.write(f"**Local:** {cabecalho.get('local_instalacao', 'N/A')}")
-                        st.write(f"**Contato:** {cabecalho.get('contato', 'N/A')}")
-                    with col_b:
-                        st.write(f"**OP Número:** {cabecalho.get('numero_op', 'N/A')}")
-                        st.write(f"**Data:** {cabecalho.get('data', datetime.now().strftime('%d/%m/%Y'))}")
-                        st.write(f"**Endereço:** {cabecalho.get('endereco', 'N/A')}")
+                    st.write(f"**Cliente:** {cabecalho.get('cliente', 'N/A')}")
+                    st.write(f"**Local:** {cabecalho.get('local_instalacao', 'N/A')}")
+                    st.write(f"**OP Número:** {cabecalho.get('numero_op', 'N/A')}")
                 
                 with tab2:
                     df = pd.DataFrame(resultados)
                     st.dataframe(df, use_column_width=True, height=400)
                     
-                    # Botão de exportação
                     csv = df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Baixar CSV",
-                        data=csv,
-                        file_name=f"dimensionamento_{cabecalho.get('numero_op', 'relatorio')}.csv",
-                        mime="text/csv"
-                    )
-                
-                with tab3:
-                    # Gráfico de materiais
-                    df_cat = df.groupby("categoria")["total_material"].sum().reset_index()
-                    if len(df_cat) > 0:
+                    st.download_button("📥 Baixar CSV", csv, f"dimensionamento_{cabecalho.get('numero_op', 'op')}.csv", "text/csv")
+                    
+                    if len(df) > 0:
+                        df_cat = df.groupby("categoria")["total_material"].sum().reset_index()
                         fig = px.pie(df_cat, values="total_material", names="categoria", title="Distribuição por Categoria")
                         st.plotly_chart(fig, use_column_width=True)
-                    
-                    # Gráfico de barras
-                    df_mat = df.groupby("material")["quantidade_calculada"].sum().reset_index().head(10)
-                    if len(df_mat) > 0:
-                        fig2 = px.bar(df_mat, x="material", y="quantidade_calculada", title="Top 10 Materiais por Quantidade")
-                        st.plotly_chart(fig2, use_column_width=True)
                 
-                with tab4:
-                    # Gera e exibe relatório HTML
-                    html_relatorio = gerar_relatorio_html(cabecalho, resultados, uploaded_file.name)
-                    st.components.v1.html(html_relatorio, height=600, scrolling=True)
+                with tab3:
+                    html_relatorio = gerar_relatorio_html(cabecalho, resultados)
+                    st.components.v1.html(html_relatorio, height=500, scrolling=True)
                     
-                    # Download do relatório
                     b64 = base64.b64encode(html_relatorio.encode()).decode()
-                    href = f'<a href="data:text/html;base64,{b64}" download="relatorio_dimensionamento_{cabecalho.get("numero_op", "op")}.html" style="background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 10px; display: inline-block;">📥 Baixar Relatório Completo (HTML)</a>'
-                    st.markdown(href, unsafe_allow_html=True)
-                    
-                    st.info("💡 **Dica:** Clique em 'IMPRIMIR RELATÓRIO' no relatório acima para gerar uma versão para impressão ou salvar como PDF.")
-            
+                    st.markdown(f'<a href="data:text/html;base64,{b64}" download="relatorio_{cabecalho.get("numero_op", "op")}.html" style="background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">📥 Baixar Relatório HTML</a>', unsafe_allow_html=True)
             else:
-                st.error("❌ Não foi possível extrair itens do PDF. Verifique o formato do arquivo.")
-    
+                st.error("❌ Não foi possível extrair dados do PDF. Verifique o formato.")
     else:
-        st.info("👈 **Envie um arquivo PDF** para começar o dimensionamento automático")
+        st.info("👈 **Envie um arquivo PDF** (OP ou desenho técnico) para começar")
         
-        # Exemplo de como funciona
-        with st.expander("📖 Como funciona o sistema?"):
+        with st.expander("📖 Como funciona?"):
             st.markdown("""
-            ### 🔍 Extração Automática de Medidas
+            ### 🔍 O sistema reconhece:
             
-            O sistema reconhece automaticamente:
+            **Ordens de Produção:**
+            - Itens com código e quantidade
+            - Medidas como `61,93m²`, `2,22 x 1,70m`, `15cm de altura`
             
-            **Medidas de área:**
-            - `61,93m²` → Adesivo/Lona
-            - `2,22 x 1,70m` → Painel ACM
-            - `60cm x 40cm` → Placa de sinalização
+            **Desenhos Técnicos:**
+            - Dimensões de painel (`2,22 x 1,70`)
+            - Componentes (`180 módulos LED`, `Fonte 12A`)
+            - Materiais (`chapa galvanizada #22`, `acrílico 4mm`)
             
-            **Letreiros:**
-            - `15cm de altura de letra` → Letras em inox/acrílico
-            
-            **Totens e estruturas:**
-            - `H=5 M` → Altura do totem
-            - `diâmetro de 0,70m` → Placa redonda
-            
-            **Iluminação:**
-            - `180 módulos de LED` → Quantidade de LEDs
-            - `0,72 W` → Potência por módulo
-            
-            ### 📊 Resultados Gerados
-            
-            - Lista completa de materiais com quantidades calculadas
-            - Cálculo de perdas (10-15% incluso)
+            ### 📊 Resultados:
+            - Lista completa de materiais com quantidades
+            - Cálculo de perdas (5-15%)
             - Estimativa de custos
-            - Relatório profissional para impressão
-            - Exportação em CSV e HTML
+            - Relatório para impressão
             """)
 
 if __name__ == "__main__":
