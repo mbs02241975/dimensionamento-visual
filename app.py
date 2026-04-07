@@ -53,7 +53,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# BANCO DE DADOS DE MATERIAIS (EXPANSÍVEL)
+# BANCO DE DADOS DE MATERIAIS
 # ==========================================
 CATALOGO_MATERIAIS = {
     "adesivo_vinil": {
@@ -121,7 +121,7 @@ CATALOGO_MATERIAIS = {
     },
     "led_modulo": {
         "nome": "Módulo de LED",
-        "unidade": "W",
+        "unidade": "unidade",
         "categoria": "Iluminação",
         "fator_perda": 1.0,
         "preco_unitario": 2.50
@@ -220,7 +220,7 @@ CATALOGO_MATERIAIS = {
 }
 
 # ==========================================
-# FUNÇÕES AVANÇADAS DE EXTRAÇÃO
+# FUNÇÕES DE EXTRAÇÃO
 # ==========================================
 
 def extrair_texto_pdf(arquivo):
@@ -320,7 +320,6 @@ def extrair_medidas_desenho_tecnico(texto):
                     medidas["area_painel"] = larg * alt
             elif chave == "espessura_chapa":
                 medidas["bitola_chapa"] = int(matches[0])
-                # #22 chapa = 0,76mm, #18 = 1,2mm, #16 = 1,5mm
                 bitolas = {22: 0.76, 20: 0.95, 18: 1.2, 16: 1.5, 14: 1.9}
                 medidas["espessura_chapa_mm"] = bitolas.get(int(matches[0]), 0.76)
             elif chave == "espessura_acrilico":
@@ -609,10 +608,6 @@ def calcular_material_desenho_tecnico(medidas, qtd=1):
     
     return resultados
 
-# ==========================================
-# FUNÇÃO PRINCIPAL DE PROCESSAMENTO
-# ==========================================
-
 def processar_pdf_completo(arquivo):
     """Processa o PDF e retorna todos os dados estruturados"""
     texto = extrair_texto_pdf(arquivo)
@@ -625,7 +620,6 @@ def processar_pdf_completo(arquivo):
     
     resultados = []
     
-    # Processa itens da tabela
     for item in itens:
         material_id = item["material_tipo"]
         material_info = CATALOGO_MATERIAIS.get(material_id, {
@@ -652,7 +646,6 @@ def processar_pdf_completo(arquivo):
         }
         resultados.append(resultado)
     
-    # Se for desenho técnico (sem itens na tabela mas com medidas de painel)
     if len(resultados) == 0 and medidas_desenho.get("area_painel", 0) > 0:
         st.info("📐 Desenho técnico detectado! Calculando materiais automaticamente...")
         
@@ -682,10 +675,6 @@ def processar_pdf_completo(arquivo):
             resultados.append(resultado)
     
     return cabecalho, resultados
-
-# ==========================================
-# GERADOR DE RELATÓRIO HTML PROFISSIONAL
-# ==========================================
 
 def gerar_relatorio_html(cabecalho, resultados):
     """Gera relatório HTML completo com design profissional"""
@@ -804,21 +793,23 @@ def gerar_relatorio_html(cabecalho, resultados):
             <div style="padding: 0 30px;">
                 <h2>📦 MATERIAIS DIMENSIONADOS</h2>
                 <table>
-                    <thead><tr><th>Código</th><th>Qtd OP</th><th>Descrição</th><th>Material</th><th>Unidade</th><th>Quantidade</th><th>Total (R$)</th></tr></thead>
+                    <thead>
+                        <tr><th>Código</th><th>Qtd OP</th><th>Descrição</th><th>Material</th><th>Unidade</th><th>Quantidade</th><th>Total (R$)</th></tr>
+                    </thead>
                     <tbody>
     """
     
     for r in resultados:
         html += f"""
-            <tr>
-                <td>{r['codigo']}</td>
-                <td>{r['quantidade_op']}</td>
-                <td>{r['descricao']}</td>
-                <td>{r['material']}</td>
-                <td>{r['unidade']}</td>
-                <td><strong>{r['quantidade_calculada']}</strong></td>
-                <td><strong>R$ {r['total_material']:.2f}</strong></td>
-            </tr>
+                        <tr>
+                            <td>{r['codigo']}</td>
+                            <td>{r['quantidade_op']}</td>
+                            <td>{r['descricao']}</td>
+                            <td>{r['material']}</td>
+                            <td>{r['unidade']}</td>
+                            <td><strong>{r['quantidade_calculada']}</strong></td>
+                            <td><strong>R$ {r['total_material']:.2f}</strong></td>
+                        </tr>
         """
     
     html += f"""
@@ -904,7 +895,7 @@ def main():
                 
                 with tab2:
                     df = pd.DataFrame(resultados)
-                    st.dataframe(df, use_column_width=True, height=400)
+                    st.dataframe(df, use_container_width=True, height=400)
                     
                     csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button("📥 Baixar CSV", csv, f"dimensionamento_{cabecalho.get('numero_op', 'op')}.csv", "text/csv")
@@ -912,7 +903,7 @@ def main():
                     if len(df) > 0:
                         df_cat = df.groupby("categoria")["total_material"].sum().reset_index()
                         fig = px.pie(df_cat, values="total_material", names="categoria", title="Distribuição por Categoria")
-                        st.plotly_chart(fig, use_column_width=True)
+                        st.plotly_chart(fig, use_container_width=True)
                 
                 with tab3:
                     html_relatorio = gerar_relatorio_html(cabecalho, resultados)
