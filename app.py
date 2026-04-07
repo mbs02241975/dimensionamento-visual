@@ -11,6 +11,7 @@ import plotly.express as px
 
 st.set_page_config(
     page_title="Sistema Pro - Dimensionamento Visual",
+    page_icon="📐",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -40,6 +41,13 @@ st.markdown("""
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         margin-bottom: 0.5rem;
+    }
+    .stButton > button {
+        background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 5px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -219,65 +227,29 @@ def extrair_medidas_ultra_avancado(texto):
     
     # Padrões de medida
     padroes = {
-        # m² direto (61,93m², 15.5m²)
         "m2_direto": r"(\d+[.,]?\d*)\s*m[²2]",
-        
-        # Largura x Altura (2,22 x 1,70m)
         "largura_x_altura": r"(\d+[.,]?\d*)\s*[xX]\s*(\d+[.,]?\d*)\s*m",
-        
-        # Medidas em cm (60cm x 40cm)
         "cm_x_cm": r"(\d+)\s*cm\s*[xX]\s*(\d+)\s*cm",
-        
-        # Altura de letra (15cm de altura)
         "altura_letra": r"(\d+)\s*cm\s*de\s*altura\s*de\s*letra",
-        
-        # Diâmetro (diâmetro de 0,70m)
         "diametro": r"di[âa]metro\s*de\s*(\d+[.,]?\d*)\s*m",
-        
-        # Testeira/lona (15,50 X 1,00M)
         "testeira": r"(\d+[.,]?\d*)\s*[Xx]\s*(\d+[.,]?\d*)\s*M",
-        
-        # Altura de totem (H=5 M, H=5m)
         "altura_totem": r"[Hh]=(\d+[.,]?\d*)\s*M",
-        
-        # Largura fixa (largura 1,30m)
         "largura": r"largura\s+(\d+[.,]?\d*)\s*m",
-        
-        # Altura fixa (altura 0,60m)
         "altura": r"altura\s+(\d+[.,]?\d*)\s*m",
-        
-        # Espessura (espessura de 40mm)
         "espessura": r"espessura\s+de\s+(\d+)\s*mm",
-        
-        # Comprimento linear (82m de testeira)
         "comprimento_linear": r"(\d+)\s*m\s+de\s+(\w+)",
-        
-        # Metros quadrados em texto (61,93 metros quadrados)
         "m2_texto": r"(\d+[.,]?\d*)\s*metros?\s+quadrados",
-        
-        # Volume (caso tenha profundidade)
         "volume": r"(\d+[.,]?\d*)\s*x\s*(\d+[.,]?\d*)\s*x\s*(\d+[.,]?\d*)",
-        
-        # Potência LED (0,72 W)
         "potencia_led": r"(\d+[.,]?\d*)\s*W",
-        
-        # Quantidade de módulos LED (180 módulos)
         "qtd_led": r"(\d+)\s*m[oó]dulos?\s+de\s+LED",
-        
-        # Área de painel (Painel 2,22 x 1,70)
-        "painel": r"Painel\s+(\d+[.,]?\d*)\s*x\s*(\d+[.,]?\d*)",
-        
-        # Corrente do driver (12 A)
         "corrente_driver": r"(\d+)\s*A",
-        
-        # Tensão (220 V)
         "tensao": r"(\d+)\s*V"
     }
     
     for chave, padrao in padroes.items():
         matches = re.findall(padrao, texto, re.IGNORECASE)
         if matches:
-            if chave == "largura_x_altura" or chave == "painel" or chave == "testeira":
+            if chave in ["largura_x_altura", "testeira"]:
                 for match in matches:
                     larg = float(match[0].replace(",", "."))
                     alt = float(match[1].replace(",", "."))
@@ -372,40 +344,31 @@ def extrair_itens_completos(texto):
     itens = []
     linhas = texto.split("\n")
     
-    # Padrões de início de item
-    padroes_item = [
-        r"^([A-Za-z]\)?)\s*(\d+)\s+(.+)",  # A) 10 Descrição
-        r"^Item\s+Quantidade\s+Engenho",  # Cabeçalho de tabela
-        r"^([A-Z])\s+(\d+)\s+",  # A 10
-    ]
-    
     item_atual = None
     
-    for i, linha in enumerate(linhas):
+    for linha in linhas:
         linha = linha.strip()
         if not linha or len(linha) < 3:
             continue
         
         # Detecta início de item
-        for padrao in padroes_item:
-            match = re.match(padrao, linha, re.IGNORECASE)
-            if match and "Item" not in linha:
-                # Salva item anterior
-                if item_atual and item_atual.get("descricao"):
-                    itens.append(item_atual)
-                
-                # Cria novo item
-                codigo = match.group(1).replace(")", "") if len(match.groups()) >= 1 else chr(65 + len(itens))
-                quantidade = int(match.group(2)) if len(match.groups()) >= 2 else 1
-                descricao = match.group(3) if len(match.groups()) >= 3 else ""
-                
-                item_atual = {
-                    "codigo": codigo,
-                    "quantidade": quantidade,
-                    "descricao": descricao,
-                    "descricao_completa": descricao
-                }
-                break
+        match = re.match(r"^([A-Za-z]\)?)\s*(\d+)\s+(.+)", linha, re.IGNORECASE)
+        if match and "Item" not in linha and "DESCRIÇÃO" not in linha:
+            # Salva item anterior
+            if item_atual and item_atual.get("descricao"):
+                itens.append(item_atual)
+            
+            # Cria novo item
+            codigo = match.group(1).replace(")", "")
+            quantidade = int(match.group(2))
+            descricao = match.group(3)
+            
+            item_atual = {
+                "codigo": codigo,
+                "quantidade": quantidade,
+                "descricao": descricao,
+                "descricao_completa": descricao
+            }
         else:
             # Continua descrição do item atual
             if item_atual:
@@ -446,7 +409,6 @@ def identificar_material_principal(descricao):
         "pintura": "pintura_automotiva",
         "fita dupla face": "fita_dupla_face",
         "estrutura metálica": "estrutura_metalica",
-        "estrutura metalica": "estrutura_metalica",
         "totem": "totem_completo",
         "placa de sinalização": "placa_sinalizacao",
         "sinalização": "placa_sinalizacao",
@@ -509,13 +471,12 @@ def calcular_quantidade_material(item, material_info, medidas):
         # Fonte LED - por ampere
         corrente = medidas.get("corrente_driver", 0)
         if corrente > 0:
-            return 1 * qtd  # Uma fonte por conjunto
+            return 1 * qtd
         return 0
     
     elif tipo == "estrutura_metalica":
         # Estrutura metálica - estimativa por área
         if area > 0:
-            # Estimativa: 8kg por m² de estrutura
             kg = area * 8 * qtd
             return kg * material_info["fator_perda"]
         return 0
@@ -527,19 +488,8 @@ def calcular_quantidade_material(item, material_info, medidas):
             return perimetro * qtd
         return comprimento * qtd
     
-    elif tipo == "totem_completo":
+    elif tipo in ["totem_completo", "placa_sinalizacao", "merchandising_grid", "chapa_galvanizada"]:
         return qtd
-    
-    elif tipo == "placa_sinalizacao":
-        return qtd
-    
-    elif tipo == "merchandising_grid":
-        return qtd
-    
-    elif tipo == "chapa_galvanizada":
-        if area > 0:
-            return area * qtd * material_info["fator_perda"]
-        return 0
     
     return 0
 
@@ -551,7 +501,7 @@ def processar_pdf_completo(arquivo):
     """Processa o PDF e retorna todos os dados estruturados"""
     texto = extrair_texto_pdf(arquivo)
     if not texto:
-        return None, None, None
+        return None, None
     
     cabecalho = extrair_cabecalho_completo(texto)
     itens = extrair_itens_completos(texto)
@@ -572,19 +522,18 @@ def processar_pdf_completo(arquivo):
         resultado = {
             "codigo": item["codigo"],
             "quantidade_op": item["quantidade"],
-            "descricao": item["descricao"][:100],
+            "descricao": item["descricao"][:80],
             "material": material_info["nome"],
             "categoria": material_info["categoria"],
             "unidade": material_info["unidade"],
             "quantidade_calculada": round(quantidade_calculada, 2),
             "preco_unitario": material_info["preco_unitario"],
             "total_material": round(quantidade_calculada * material_info["preco_unitario"], 2),
-            "medidas_extraidas": json.dumps(item["medidas"], ensure_ascii=False),
             "detalhes": f"Área: {item['medidas'].get('area_m2', 0):.2f}m²" if item['medidas'].get('area_m2') else "Sem medidas específicas"
         }
         resultados.append(resultado)
     
-    return cabecalho, resultados, texto
+    return cabecalho, resultados
 
 # ==========================================
 # GERADOR DE RELATÓRIO HTML PROFISSIONAL
@@ -810,7 +759,6 @@ def gerar_relatorio_html(cabecalho, resultados, nome_arquivo=""):
         <button class="btn-print" onclick="window.print()">🖨️ IMPRIMIR RELATÓRIO</button>
         
         <script>
-            // Adiciona funcionalidade de impressão automática se desejar
             console.log("Relatório pronto para impressão");
         </script>
     </body>
@@ -826,7 +774,6 @@ def gerar_relatorio_html(cabecalho, resultados, nome_arquivo=""):
 def main():
     # Sidebar
     with st.sidebar:
-        st.image("https://via.placeholder.com/300x100/667eea/white?text=DIMENSIONA+VISUAL", use_container_width=False)
         st.markdown("## 🎯 Sistema Profissional")
         st.markdown("---")
         st.markdown("### 📋 Funcionalidades:")
@@ -868,7 +815,7 @@ def main():
     
     if uploaded_file is not None:
         with st.spinner("🔄 Processando PDF e calculando materiais..."):
-            cabecalho, resultados, texto_raw = processar_pdf_completo(uploaded_file)
+            cabecalho, resultados = processar_pdf_completo(uploaded_file)
             
             if resultados and len(resultados) > 0:
                 st.success(f"✅ Processado com sucesso! {len(resultados)} itens encontrados.")
@@ -901,7 +848,7 @@ def main():
                 
                 with tab2:
                     df = pd.DataFrame(resultados)
-                    st.dataframe(df, use_container_width=True, height=400)
+                    st.dataframe(df, use_column_width=True, height=400)
                     
                     # Botão de exportação
                     csv = df.to_csv(index=False).encode('utf-8')
@@ -915,13 +862,15 @@ def main():
                 with tab3:
                     # Gráfico de materiais
                     df_cat = df.groupby("categoria")["total_material"].sum().reset_index()
-                    fig = px.pie(df_cat, values="total_material", names="categoria", title="Distribuição por Categoria")
-                    st.plotly_chart(fig, use_container_width=True)
+                    if len(df_cat) > 0:
+                        fig = px.pie(df_cat, values="total_material", names="categoria", title="Distribuição por Categoria")
+                        st.plotly_chart(fig, use_column_width=True)
                     
                     # Gráfico de barras
                     df_mat = df.groupby("material")["quantidade_calculada"].sum().reset_index().head(10)
-                    fig2 = px.bar(df_mat, x="material", y="quantidade_calculada", title="Top 10 Materiais por Quantidade")
-                    st.plotly_chart(fig2, use_container_width=True)
+                    if len(df_mat) > 0:
+                        fig2 = px.bar(df_mat, x="material", y="quantidade_calculada", title="Top 10 Materiais por Quantidade")
+                        st.plotly_chart(fig2, use_column_width=True)
                 
                 with tab4:
                     # Gera e exibe relatório HTML
@@ -930,10 +879,10 @@ def main():
                     
                     # Download do relatório
                     b64 = base64.b64encode(html_relatorio.encode()).decode()
-                    href = f'<a href="data:text/html;base64,{b64}" download="relatorio_dimensionamento_{cabecalho.get("numero_op", "op")}.html" class="download-button">📥 Baixar Relatório Completo (HTML)</a>'
+                    href = f'<a href="data:text/html;base64,{b64}" download="relatorio_dimensionamento_{cabecalho.get("numero_op", "op")}.html" style="background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 10px; display: inline-block;">📥 Baixar Relatório Completo (HTML)</a>'
                     st.markdown(href, unsafe_allow_html=True)
                     
-                    st.info("💡 **Dica:** Clique em 'IMPRIMIR RELATÓRIO' no canto superior direito para gerar uma versão para impressão ou salvar como PDF.")
+                    st.info("💡 **Dica:** Clique em 'IMPRIMIR RELATÓRIO' no relatório acima para gerar uma versão para impressão ou salvar como PDF.")
             
             else:
                 st.error("❌ Não foi possível extrair itens do PDF. Verifique o formato do arquivo.")
@@ -971,13 +920,6 @@ def main():
             - Estimativa de custos
             - Relatório profissional para impressão
             - Exportação em CSV e HTML
-            
-            ### 🚀 Próximos Passos
-            
-            1. Envie qualquer PDF de OP
-            2. Aguarde o processamento automático
-            3. Revise os cálculos
-            4. Exporte ou imprima o relatório
             """)
 
 if __name__ == "__main__":
